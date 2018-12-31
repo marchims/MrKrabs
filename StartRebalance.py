@@ -10,9 +10,9 @@ import CryptoTrader
 importlib.reload(CryptoTrader)
 import pandas as pd
 
-keys = pd.read_csv("/home/pi/Crypto/keys.csv",header=None).values
+keys = pd.read_csv("/home/pi/Crypto/config/keys.csv",header=None).values
 
-mybot = CryptoTrader.Rebalancer(keys,"ETH","/home/pi/Crypto/crypto/Portfolio balances.xlsx")
+mybot = CryptoTrader.Rebalancer(keys,"ETH","/home/pi/Crypto/crypto/config/Portfolio balances.xlsx")
 
 mybot.trading_enabled = False
 mybot.total_fees = 0.021500653
