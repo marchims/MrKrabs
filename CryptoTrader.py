@@ -14,7 +14,9 @@ import matplotlib.pyplot as plt
 import time
 import pdb
 from threading import Timer
+from twisted.internet import reactor
 import json
+import sys
 
 class Rebalancer:
     
@@ -491,6 +493,8 @@ class MrKrabs2:
     cooldown_reset_thresh = 15
     buyback_enable_thresh = 2
     
+    refresh_rate = 1
+    
     def __init__(self,keys,pair):
         self.client = Client(keys[0][0],keys[0][1])
         self.get_pair_info(pair)
@@ -552,6 +556,7 @@ class MrKrabs2:
         
         self.load_state()
         
+        
     def load_state(self):
         try:
             fid = open(self.log_file,'r')
@@ -585,7 +590,8 @@ class MrKrabs2:
         self.min_bnb = load_struct['min_bnb']
         self.bnb_buy_amt = load_struct['bnb_buy_amt']
         self.cooldown_reset_thresh = load_struct['cooldown_reset_thresh']
-        self.buyback_enable_thresh = load_struct['buyback_enable_thresh']        
+        self.buyback_enable_thresh = load_struct['buyback_enable_thresh']
+        self.refresh_rate = load_struct['refresh_rate']
         
     def save_state(self):
         save_struct = {}
@@ -617,6 +623,7 @@ class MrKrabs2:
         save_struct['bnb_buy_amt'] = self.bnb_buy_amt
         save_struct['cooldown_reset_thresh'] = self.cooldown_reset_thresh
         save_struct['buyback_enable_thresh'] = self.buyback_enable_thresh
+        save_struct['refresh_rate'] = self.refresh_rate
  
         fid = open(self.log_file,'w')
         json.dump(save_struct,fid)
@@ -799,7 +806,7 @@ class MrKrabs2:
                                                                 self.depth_bid_vol.reshape((1,len(self.depth_bid_vol))),self.depth_ask_vol.reshape((1,len(self.depth_ask_vol))),
                                                                 self.filt_ema_buffer_vol_sell[-1].reshape((1,1)),self.filt_ema_buffer_vol_buy[-1].reshape((1,1))),axis=1),axis=0)
                 self.processLatestData()
-                self.trade_model()
+                #self.trade_model()
                 
                 #self.validate_trades()
                 
@@ -844,7 +851,6 @@ class MrKrabs2:
                 if time.time()-self.time_buffer[-1] > self.trade_socket_timeout:
                     print('Trade socket timeout. Restarting websockets')
                     self.stop()
-                    self.run()
             #plt.pause(0.05)
             
         elif msg['e'] == 'error':
@@ -918,20 +924,24 @@ class MrKrabs2:
             self.fig_depth = plt.figure(2)
             plt.ion()
         # then start the socket manager
-        
         self.socket_manager.start()
-    
+        self.timer = Timer(self.refresh_rate,lambda: self.trade_model())
+        self.timer.start()
+
     def stop(self):
-        self.socket_manager.stop_socket(self.socket_key)
-        self.socket_key = None
-        self.socket_manager.stop_socket(self.socket_key_trade)
-        self.socket_key_trade = None
-        self.socket_manager.stop_socket(self.socket_key_orders)
-        self.socket_key_orders = None
-        self.socket_manager.stop_socket(self.socket_key_account)
-        self.socket_key_account = None
+        self.timer.cancel()
         self.socket_manager.close()
+        #self.socket_manager.stop_socket(self.socket_key)
+        self.socket_key = None
+        #self.socket_manager.stop_socket(self.socket_key_trade)
+        self.socket_key_trade = None
+        #self.socket_manager.stop_socket(self.socket_key_orders)
+        self.socket_key_orders = None
+        #self.socket_manager.stop_socket(self.socket_key_account)
+        self.socket_key_account = None
+        reactor.stop()
         self.socket_manager = None
+        sys.exit()
     
     '''
     ========================================================================
@@ -991,9 +1001,11 @@ class MrKrabs2:
         
         
     def trade_model(self):
-        
         flag = 0
-        
+        self.timer = Timer(self.refresh_rate,lambda: self.trade_model())
+        self.timer.start()
+        if self.data.shape[0] == 0:
+            return
         
         if self.trading_enabled == False and flag == 0:
             trade_time = self.client.get_server_time()
@@ -1055,10 +1067,9 @@ class MrKrabs2:
         
         if self.trading_enabled == True:
             if self.wallet_up_to_date == False:
-                print('Wallet not updated. Restarting websocket')
+                print('Wallet not updated. Shutting Down')
                 # restart websockets
                 self.stop()
-                self.run()
 #                self.update_wallet()
 #                self.socket_manager.stop_socket(self.socket_key_account)
 #                self.socket_key_account = self.socket_manager.start_user_socket(lambda x: self.account_update(x))
