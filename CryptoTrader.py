@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import time
 import pdb
 from threading import Timer
-
+import json
 
 class Rebalancer:
     
@@ -424,7 +424,7 @@ class Rebalancer:
                                     np.array([self.norm_gain,self.total_gain,self.total_fees]).reshape((1,3))),axis=1),axis=0)
         try:
             toWrite = pd.DataFrame(data = self.trade_data)
-            toWrite.to_csv('RebalanceLog_latest.csv',header = False,index = False)
+            toWrite.to_csv('../logs/RebalanceLog_latest.csv',header = False,index = False)
         except:
             print('Error writing to log file!')
         
@@ -495,7 +495,8 @@ class MrKrabs2:
         self.client = Client(keys[0][0],keys[0][1])
         self.get_pair_info(pair)
         self.fee_coin_amt = 0
-        # start any sockets here, i.e a trade socket
+        self.log_file = "../logs/{}_state.json".format(pair)
+        
         self.trade_buffer = np.zeros((0))
         self.ask_buffer = np.zeros((0))
         self.bid_buffer = np.zeros((0))
@@ -548,6 +549,78 @@ class MrKrabs2:
         self.target_mix = 0.50
         self.buy_model_installed = False
         self.sell_model_installed = False
+        
+        self.load_state()
+        
+    def load_state(self):
+        try:
+            fid = open(self.log_file,'r')
+        except:
+            return
+        load_struct = json.load(fid)
+        fid.close()
+        
+        self.last_action = load_struct['last_action']
+        self.cooldown_reset = load_struct['cooldown_reset']
+        self.buyback_enable = load_struct['buyback_enable']
+        self.mean_buy_price = load_struct['mean_buy_price']
+        self.mean_sell_price = load_struct['mean_sell_price']
+        self.buffer_time = load_struct['buffer_time']
+        self.ema_len = load_struct['ema_len']
+        self.max_hist_len = load_struct['max_hist_len']
+        self.reset_timeout = load_struct['reset_timeout']
+        self.timeout_thresh = load_struct['timeout_thresh']
+        self.trade_socket_timeout = load_struct['trade_socket_timeout']
+        self.fee_amt = load_struct['fee_amt']
+        self.base_trade_amt = load_struct['base_trade_amt']
+        self.bias_limit = load_struct['bias_limit']
+        self.buyback_ratio = load_struct['buyback_ratio']
+        self.variance_ff = load_struct['variance_ff']
+        self.ema_filts = load_struct['ema_filts']
+        self.slope_levels = load_struct['slope_levels']
+        self.margin_scale = load_struct['margin_scale']
+        self.margin_exp = load_struct['margin_exp']
+        self.margin_min = load_struct['margin_min']
+        self.margin_max = load_struct['margin_max']
+        self.min_bnb = load_struct['min_bnb']
+        self.bnb_buy_amt = load_struct['bnb_buy_amt']
+        self.cooldown_reset_thresh = load_struct['cooldown_reset_thresh']
+        self.buyback_enable_thresh = load_struct['buyback_enable_thresh']        
+        
+    def save_state(self):
+        save_struct = {}
+        save_struct['last_action'] = self.last_action
+        save_struct['cooldown_reset'] = self.cooldown_reset
+        save_struct['buyback_enable'] = self.buyback_enable
+        save_struct['mean_buy_price'] = self.mean_buy_price
+        save_struct['mean_sell_price'] = self.mean_sell_price
+        
+        
+        save_struct['buffer_time'] = self.buffer_time
+        save_struct['ema_len'] = self.ema_len
+        save_struct['max_hist_len'] = self.max_hist_len
+        save_struct['reset_timeout'] = self.reset_timeout
+        save_struct['timeout_thresh'] = self.timeout_thresh
+        save_struct['trade_socket_timeout'] = self.trade_socket_timeout
+        save_struct['fee_amt'] = self.fee_amt
+        save_struct['base_trade_amt'] = self.base_trade_amt
+        save_struct['bias_limit'] = self.bias_limit
+        save_struct['buyback_ratio'] = self.buyback_ratio
+        save_struct['variance_ff'] = self.variance_ff
+        save_struct['ema_filts'] = self.ema_filts
+        save_struct['slope_levels'] = self.slope_levels
+        save_struct['margin_scale'] = self.margin_scale
+        save_struct['margin_exp'] = self.margin_exp
+        save_struct['margin_min'] = self.margin_min
+        save_struct['margin_max'] = self.margin_max
+        save_struct['min_bnb'] = self.min_bnb
+        save_struct['bnb_buy_amt'] = self.bnb_buy_amt
+        save_struct['cooldown_reset_thresh'] = self.cooldown_reset_thresh
+        save_struct['buyback_enable_thresh'] = self.buyback_enable_thresh
+ 
+        fid = open(self.log_file,'w')
+        json.dump(save_struct,fid)
+        fid.close()
         
     def enable_trading(self):
         self.trading_enabled = True
@@ -959,6 +1032,7 @@ class MrKrabs2:
         #p = np.random.rand()
         buy_guidance = False
         sell_guidance = False
+        need_log = True
         
         '''
         p = np.random.rand()
@@ -1038,6 +1112,7 @@ class MrKrabs2:
                         self.wallet_up_to_date = False
                         self.cooldown_reset = False
                         self.buyback_enable= True
+                        need_log = True
                         self.last_action = 'sell'
                         self.base_amt = self.base_amt + coin_amt*float(result['price'])
                         self.coin_amt = self.coin_amt - coin_amt
@@ -1074,6 +1149,7 @@ class MrKrabs2:
                         self.wallet_up_to_date = False
                         self.cooldown_reset = False
                         self.buyback_enable= True
+                        need_log = True
                         self.last_action = 'buy'
                         self.base_amt = self.base_amt - coin_amt*float(result['price'])
                         self.coin_amt = self.coin_amt + coin_amt
@@ -1109,6 +1185,7 @@ class MrKrabs2:
                                 self.trade_data = np.append(self.trade_data,np.array([result['transactTime']/1000,-1,float(result['price']),float(result['executedQty']),True,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
                                 self.buyback_enable = False           
                                 self.wallet_up_to_date = False
+                                need_log = True
                                 self.base_amt = self.base_amt + coin_amt*float(result['price'])
                                 self.coin_amt = self.coin_amt - coin_amt
                         
@@ -1145,6 +1222,7 @@ class MrKrabs2:
                                 self.trade_data = np.append(self.trade_data,np.array([result['transactTime']/1000,1,float(result['price']),float(result['executedQty']),True,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
                                 self.buyback_enable = False
                                 self.wallet_up_to_date = False
+                                need_log = True
                                 self.base_amt = self.base_amt - coin_amt*float(result['price'])
                                 self.coin_amt = self.coin_amt + coin_amt
         
@@ -1157,7 +1235,8 @@ class MrKrabs2:
                 print('Bought BNB: {}@{}!'.format(result['executedQty'],result['price']))
                 self.wallet_up_to_date = False
                         
-        
+        if need_log == True:
+            self.save_state()
     
     def processLatestData(self,playbackFlag = False):
         row_data = self.data[-1,2:6].reshape((1,4))
