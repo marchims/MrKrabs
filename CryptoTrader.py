@@ -17,6 +17,8 @@ from threading import Timer
 from twisted.internet import reactor
 import json
 import sys
+from pathlib import Path
+import os
 
 class Rebalancer:
     
@@ -44,7 +46,10 @@ class Rebalancer:
         self.total_gain = 0
         
         self.total_fees = 0
-        
+        self.log_file = "../logs/rebablance_state.json"
+        self.trade_log_file = '../logs/rebalance_log.csv'
+        self.archive_dir = '../logs/archive'
+        self.archive_logs()
         
         # load the worksheet with the ratios
         data = pd.read_excel(ratio_worksheet,header=None)
@@ -67,12 +72,46 @@ class Rebalancer:
         self.trading_enabled = False
             
         self.init_total_value = data.loc[3,1]
+        self.load_state()
         
+    def load_state(self):
+        try:
+            fid = open(self.log_file,'r')
+        except:
+            return
+        load_struct = json.load(fid)
+        fid.close()
         
+        self.total_fees = load_struct['total_fees']
+        self.interval = load_struct['interval']
+        self.fudge_factor = load_struct['fudge_factor']
+        self.fee_amt = load_struct['fee_amt']
+        self.margin = load_struct['margin']
+        self.norm_margin = load_struct['norm_margin']
         
+    def save_state(self):
+        save_struct = {}
+        save_struct['total_fees'] = self.total_fees
+        save_struct['interval'] = self.interval
+        save_struct['fudge_factor'] = self.fudge_factor
+        save_struct['fee_amt'] = self.fee_amt
+        save_struct['margin'] = self.margin
+        save_struct['norm_margin'] = self.norm_margin
+ 
+        fid = open(self.log_file,'w')
+        json.dump(save_struct,fid)
+        fid.close()
         
     def init_trade_log(self):
         self.trade_data = np.zeros((0,self.num_coins+4))
+        
+    def archive_logs(self):
+        f = Path(self.trade_log_file)
+        a = Path(self.archive_dir)
+        if f.is_file():
+            if not a.is_dir():
+                os.mkdir(self.archive_dir)
+            os.rename(self.trade_log_file,'{}/rebalance_log_{}.csv'.format(self.archive_dir,time.strftime('%m_%d_%y_%H_%M_%S')))
         
     def stop(self):
         self.timer.cancel()
@@ -149,10 +188,12 @@ class Rebalancer:
                     bucket,completed = self.make_trade(coin,bucket,black_list=completed)
             print("{}: {}".format(self.base_coin,bucket))
             self.log_values()
+            
         else:
             print("No rebalance needed ({:.3f}% error {:.3f}% norm).".format(np.max(delta)*100,np.max(norm_delta)*100))
         self.timer = Timer(self.interval*3600,lambda: self.rebalance())
         self.timer.start()
+        self.save_state()
         
     def make_trade(self,coin,bucket,black_list):
         target = self.get_target_ratio(coin,black_list) * bucket
@@ -214,7 +255,13 @@ class Rebalancer:
                         else:
                             trade_amt = qty*avg_price
                         
-                        self.total_fees += trade_amt*self.fee_amt
+                        if len(self.coin_data[coin]['market_name']) > 1:
+                            if i == 0 and trade_side == SIDE_SELL:
+                                self.total_fees += trade_amt*self.fee_amt*self.lookup_price(self.coin_data[coin]['market_name'][1],trade_side)
+                            elif i == 0 and trade_side == SIDE_BUY:
+                                self.total_fees += trade_amt*self.fee_amt*self.lookup_price(self.coin_data[coin]['market_name'][1],trade_side)
+                        else:
+                            self.total_fees += trade_amt*self.fee_amt
                             
                         if i < len(self.coin_data[coin]['market_name'])-1:
                             trade_amt *= self.lookup_price(self.coin_data[coin]['market_name'][i+1],trade_side)
@@ -426,7 +473,7 @@ class Rebalancer:
                                     np.array([self.norm_gain,self.total_gain,self.total_fees]).reshape((1,3))),axis=1),axis=0)
         try:
             toWrite = pd.DataFrame(data = self.trade_data)
-            toWrite.to_csv('../logs/RebalanceLog_latest.csv',header = False,index = False)
+            toWrite.to_csv(self.trade_log_file,header = False,index = False)
         except:
             print('Error writing to log file!')
         
@@ -493,13 +540,18 @@ class MrKrabs2:
     cooldown_reset_thresh = 15
     buyback_enable_thresh = 2
     
-    refresh_rate = 1
+    refresh_rate = 1.5
     
     def __init__(self,keys,pair):
         self.client = Client(keys[0][0],keys[0][1])
         self.get_pair_info(pair)
         self.fee_coin_amt = 0
         self.log_file = "../logs/{}_state.json".format(pair)
+        self.trade_log_file = '../logs/{}_log.csv'.format(pair)
+        self.archive_dir = '../logs/archive_{}'.format(pair)
+        
+        self.init_coin_amt = 0
+        self.init_base_amt = 0
         
         self.trade_buffer = np.zeros((0))
         self.ask_buffer = np.zeros((0))
@@ -555,6 +607,7 @@ class MrKrabs2:
         self.sell_model_installed = False
         
         self.load_state()
+        self.archive_logs()
         
         
     def load_state(self):
@@ -592,6 +645,8 @@ class MrKrabs2:
         self.cooldown_reset_thresh = load_struct['cooldown_reset_thresh']
         self.buyback_enable_thresh = load_struct['buyback_enable_thresh']
         self.refresh_rate = load_struct['refresh_rate']
+        self.init_coin_amt = load_struct['init_coin_amt']
+        self.init_base_amt = load_struct['init_base_amt']
         
     def save_state(self):
         save_struct = {}
@@ -624,11 +679,21 @@ class MrKrabs2:
         save_struct['cooldown_reset_thresh'] = self.cooldown_reset_thresh
         save_struct['buyback_enable_thresh'] = self.buyback_enable_thresh
         save_struct['refresh_rate'] = self.refresh_rate
+        save_struct['init_coin_amt'] = self.init_coin_amt
+        save_struct['init_base_amt'] = self.init_base_amt
  
         fid = open(self.log_file,'w')
         json.dump(save_struct,fid)
         fid.close()
-        
+    
+    def archive_logs(self):
+        f = Path(self.trade_log_file)
+        a = Path(self.archive_dir)
+        if f.is_file():
+            if not a.is_dir():
+                os.mkdir(self.archive_dir)
+            os.rename(self.trade_log_file,'{}/trade_log_{}.csv'.format(self.archive_dir,time.strftime('%m_%d_%y_%H_%M_%S')))
+            
     def enable_trading(self):
         self.trading_enabled = True
     
@@ -859,13 +924,12 @@ class MrKrabs2:
             self.stop()
         
         # Auto Save
-        if self.data.shape[0] >= 10000:
-            print('Writing checkpoint files')
+        if self.data.shape[0] >= 100:
+            print('{}  Resetting data'.format(time.strftime('%H_%M_%S')))
             if self.logging_enabled:
                 toWrite = pd.DataFrame(data = self.data)
                 toWrite.to_csv('nano_hi_res_test_{}.csv'.format(time.strftime('%H_%M_%S %m_%d_%y')),header = False,index = False)
-                toWrite = pd.DataFrame(data = self.trade_data)
-                toWrite.to_csv('trade_data_{}.csv'.format(time.strftime('%H_%M_%S %m_%d_%y')),header = False,index = False)
+                
             
             self.data = self.data[-1,:].reshape((1,8+2*len(self.slope_levels)+2))
             
@@ -972,11 +1036,11 @@ class MrKrabs2:
         elif modelname == "sell":
             self.sell_model_installed = True
     
-    def getValue(self,base_start,coin_start):
+    def getValue(self):
         bid = self.data[-1,2]
         value = bid*self.coin_amt + self.base_amt
-        base_value = bid*coin_start + base_start
-        
+        base_value = bid*self.init_coin_amt + self.init_base_amt
+
         return (value - base_value)/base_value*100
     
     def validate_trades(self):
@@ -1013,14 +1077,14 @@ class MrKrabs2:
             
         if self.trading_enabled == True and self.trade_data.shape[0] > 0:
             if time.time() - self.trade_data[-1,0] < 0.25:
-                print('Updating too fast. Ignoring loop')
+                print('{}  Updating too fast. Ignoring loop'.format(time.strftime('%H:%M:%S')))
                 return
             
             
         if self.trading_enabled == True and self.trade_data.shape[0] > 0:
             if self.trade_data[-1,-3] == True: 
                 if time.time() - self.trade_data[-1,0] > self.buyback_enable_thresh and self.buyback_enable == False:
-                    print('Enabling buyback')
+                    print('{}  Enabling buyback'.format(time.strftime('%H:%M:%S')))
                     self.buyback_enable= True
             else:
                 self.buyback_enable= True
@@ -1032,11 +1096,11 @@ class MrKrabs2:
             if self.trade_data[-1,-3] == False: 
                 if time.time() - self.trade_data[-1,0] > self.cooldown_reset_thresh and self.cooldown_reset == False:
                     if self.cooldown_reset == False:
-                        print('Disabling cooldown')
+                        print('{}  Disabling cooldown'.format(time.strftime('%H:%M:%S')))
                         self.cooldown_reset= True
             else:
                 if self.cooldown_reset == False:
-                    print('Disabling cooldown')
+                    print('{}  Disabling cooldown'.format(time.strftime('%H:%M:%S')))
                     self.cooldown_reset= True
         else:
             self.cooldown_reset= True
@@ -1044,7 +1108,7 @@ class MrKrabs2:
         #p = np.random.rand()
         buy_guidance = False
         sell_guidance = False
-        need_log = True
+        need_log = False
         
         '''
         p = np.random.rand()
@@ -1054,7 +1118,7 @@ class MrKrabs2:
             sell_guidance = True
         '''    
         if time.time() - self.data[-1,0] > self.timeout_thresh and flag == 0:
-            print('Large time since server update. Ignoring model input')
+            print('{}  Large time since server update. {:.2f} seconds'.format(time.strftime('%H:%M:%S'),time.time() - self.data[-1,0]))
             return
         else:
             if self.buy_model_installed and (self.cooldown_reset == True or (self.cooldown_reset == False and self.last_action == 'buy')):
@@ -1067,7 +1131,7 @@ class MrKrabs2:
         
         if self.trading_enabled == True:
             if self.wallet_up_to_date == False:
-                print('Wallet not updated. Shutting Down')
+                print('{}  Wallet not updated. Shutting Down'.format(time.strftime('%H:%M:%S')))
                 # restart websockets
                 self.stop()
 #                self.update_wallet()
@@ -1093,7 +1157,7 @@ class MrKrabs2:
         #print('Gain: {:.3f}'.format((value-(bid*100 + 0.1))/(bid*100 + 0.1)*100))
         if sell_guidance == True and buy_guidance == False:
             # sell coin
-            print('Sell decision detected!')
+            print('{}  Sell decision detected'.format(time.strftime('%H:%M:%S')))
             max_sell = min(self.bias_limit*value-self.bias,self.base_trade_amt*value)
             amt = min(max_sell,bid_qty*bid)
             if amt*(1-self.fee_amt) >= self.min_trade_amt:
@@ -1118,7 +1182,7 @@ class MrKrabs2:
                         amt = coin_amt*float(result['price'])
                         if self.bias + amt*(1-self.fee_amt) > 0:
                             self.mean_sell_price = self.mean_sell_price*self.sell_surplus/(self.sell_surplus+amt*(1-self.fee_amt)) + bid*amt*(1-self.fee_amt)/(self.sell_surplus+amt*(1-self.fee_amt))
-                        print('Sell successful: {}@{}!'.format(result['executedQty'],result['price']))
+                        print('{}  Sell successful: {}@{}!'.format(time.strftime('%H:%M:%S'),result['executedQty'],result['price']))
                         self.trade_data = np.append(self.trade_data,np.array([result['transactTime']/1000,-1,float(result['price']),float(result['executedQty']),False,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
                         self.wallet_up_to_date = False
                         self.cooldown_reset = False
@@ -1130,7 +1194,7 @@ class MrKrabs2:
 
         elif sell_guidance == False and buy_guidance == True:
             # buy coin
-            print('Buy decision detected!')
+            print('{}  Buy decision detected'.format(time.strftime('%H:%M:%S')))
             max_buy = min(self.bias_limit*value+self.bias,self.base_trade_amt*value)
             amt = min(max_buy,ask_qty*ask)
             if amt >= self.min_trade_amt:
@@ -1155,7 +1219,7 @@ class MrKrabs2:
                         amt = coin_amt*float(result['price'])
                         if self.bias - amt < 0:
                             self.mean_buy_price = self.mean_buy_price*self.buy_surplus/(self.buy_surplus+amt) + ask*amt/(self.buy_surplus+amt)
-                        print('Buy successful: {}@{}!'.format(result['executedQty'],result['price']))
+                        print('{}  Buy successful: {}@{}!'.format(time.strftime('%H:%M:%S'),result['executedQty'],result['price']))
                         self.trade_data = np.append(self.trade_data,np.array([result['transactTime']/1000,1,float(result['price']),float(result['executedQty']),False,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
                         self.wallet_up_to_date = False
                         self.cooldown_reset = False
@@ -1192,7 +1256,7 @@ class MrKrabs2:
                                 if self.bias + amt*(1-self.fee_amt) > 0:
                                     self.mean_sell_price = self.mean_sell_price*self.sell_surplus/(self.sell_surplus+amt*(1-self.fee_amt)) + bid*amt*(1-self.fee_amt)/(self.sell_surplus+amt*(1-self.fee_amt))
                                     
-                                print('Sellback successful: {}@{}!'.format(result['executedQty'],result['price']))
+                                print('{}  Sellback successful: {}@{}!'.format(time.strftime('%H:%M:%S'),result['executedQty'],result['price']))
                                 self.trade_data = np.append(self.trade_data,np.array([result['transactTime']/1000,-1,float(result['price']),float(result['executedQty']),True,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
                                 self.buyback_enable = False           
                                 self.wallet_up_to_date = False
@@ -1229,7 +1293,7 @@ class MrKrabs2:
                                 if self.bias - amt < 0:
                                     self.mean_buy_price = self.mean_buy_price*self.buy_surplus/(self.buy_surplus+amt) + ask*amt/(self.buy_surplus+amt)
                                     
-                                print('Buyback successful: {}@{}!'.format(result['executedQty'],result['price']))
+                                print('{}  Buyback successful: {}@{}!'.format(time.strftime('%H:%M:%S'),result['executedQty'],result['price']))
                                 self.trade_data = np.append(self.trade_data,np.array([result['transactTime']/1000,1,float(result['price']),float(result['executedQty']),True,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
                                 self.buyback_enable = False
                                 self.wallet_up_to_date = False
@@ -1243,12 +1307,16 @@ class MrKrabs2:
             result = self.client.order_market_buy(symbol='BNBBTC',quantity=self.bnb_buy_amt)
             amt = float(result['executedQty'])
             if amt > 0:
-                print('Bought BNB: {}@{}!'.format(result['executedQty'],result['price']))
+                print('{}  Bought BNB: {}@{}!'.format(time.strftime('%H:%M:%S'),result['executedQty'],result['price']))
                 self.wallet_up_to_date = False
-                        
+        
+        self.save_state()            
         if need_log == True:
-            self.save_state()
-    
+            toWrite = pd.DataFrame(data = self.trade_data)
+            toWrite.to_csv(self.trade_log_file,header = False,index = False)
+            print('{}  Total gain: {:.2f}%'.format(time.strftime('%H:%M:%S'),self.getValue()))
+        
+                         
     def processLatestData(self,playbackFlag = False):
         row_data = self.data[-1,2:6].reshape((1,4))
         in_size = 58
