@@ -516,8 +516,8 @@ class MrKrabs2:
     
     max_hist_len = 10
     reset_timeout = 30000 # seconds since last update
-    timeout_thresh = 5
-    trade_socket_timeout = 600 # seconds without a trade
+    timeout_thresh = 30
+    trade_socket_timeout = 120 # seconds without a trade
     # model params
     #margin = 0.45/100
     fee_amt = 0.075/100
@@ -912,10 +912,6 @@ class MrKrabs2:
             if len(self.time_buffer) >= 1 and len(self.time_buffer_depth) >= 1 and self.plots: 
                 plt.draw()
             
-            if len(self.time_buffer) >= 1:
-                if time.time()-self.time_buffer[-1] > self.trade_socket_timeout:
-                    print('Trade socket timeout. Restarting websockets')
-                    self.stop()
             #plt.pause(0.05)
             
         elif msg['e'] == 'error':
@@ -925,13 +921,13 @@ class MrKrabs2:
         
         # Auto Save
         if self.data.shape[0] >= 100:
-            print('{}  Resetting data'.format(time.strftime('%H_%M_%S')))
+##            print('{}  Resetting data'.format(time.strftime('%H_%M_%S')))
             if self.logging_enabled:
                 toWrite = pd.DataFrame(data = self.data)
                 toWrite.to_csv('nano_hi_res_test_{}.csv'.format(time.strftime('%H_%M_%S %m_%d_%y')),header = False,index = False)
                 
             
-            self.data = self.data[-1,:].reshape((1,8+2*len(self.slope_levels)+2))
+            self.data = self.data[-3:,:].reshape((3,8+2*len(self.slope_levels)+2))
             
             
         
@@ -1119,6 +1115,10 @@ class MrKrabs2:
         '''    
         if time.time() - self.data[-1,0] > self.timeout_thresh and flag == 0:
             print('{}  Large time since server update. {:.2f} seconds'.format(time.strftime('%H:%M:%S'),time.time() - self.data[-1,0]))
+            return
+        elif time.time() - self.data[-1,0] > self.trade_socket_timeout and flag == 0:
+            print('{}  Restarting bot'.format(time.strftime('%H:%M:%S'),time.time() - self.data[-1,0]))
+            self.stop()
             return
         else:
             if self.buy_model_installed and (self.cooldown_reset == True or (self.cooldown_reset == False and self.last_action == 'buy')):
