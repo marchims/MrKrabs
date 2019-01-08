@@ -541,6 +541,7 @@ class MrKrabs2:
     buyback_enable_thresh = 2
     
     refresh_rate = 1.5
+    wallet_timeout_loops = 3
     
     def __init__(self,keys,pair):
         self.client = Client(keys[0][0],keys[0][1])
@@ -598,6 +599,7 @@ class MrKrabs2:
         self.bias = 0
         self.buy_surplus = 0
         self.sell_surplus = 0
+        self.wallet_timeout_count = 0
         self.dt_hist = np.zeros((0,2))
         self.var_est_last = np.nan
         self.buyback_enable = False
@@ -647,6 +649,7 @@ class MrKrabs2:
         self.refresh_rate = load_struct['refresh_rate']
         self.init_coin_amt = load_struct['init_coin_amt']
         self.init_base_amt = load_struct['init_base_amt']
+        self.wallet_timeout_loops = load_struct['wallet_timeout_loops']
         
     def save_state(self):
         save_struct = {}
@@ -681,6 +684,7 @@ class MrKrabs2:
         save_struct['refresh_rate'] = self.refresh_rate
         save_struct['init_coin_amt'] = self.init_coin_amt
         save_struct['init_base_amt'] = self.init_base_amt
+        save_struct['wallet_timeout_loops'] = self.wallet_timeout_loops
  
         fid = open(self.log_file,'w')
         json.dump(save_struct,fid)
@@ -726,7 +730,7 @@ class MrKrabs2:
      
             self.wallet_up_to_date = coin_updated and base_updated
             if self.wallet_up_to_date == True:
-                print('Wallet update received')
+                print('{}  Wallet update received'.format(time.strftime('%H:%M:%S')))
 
     def update_wallet(self):
         account_data = self.client.get_account()
@@ -747,7 +751,7 @@ class MrKrabs2:
  
         self.wallet_up_to_date = coin_updated and base_updated
         if self.wallet_up_to_date == True:
-            print('Wallet manually updated')
+            print('{}  Wallet manually updated'.format(time.strftime('%H:%M:%S')))
         # temporary amounts for testing
         #self.base_amt = 0.1
         #self.coin_amt = 100
@@ -1131,13 +1135,17 @@ class MrKrabs2:
         
         if self.trading_enabled == True:
             if self.wallet_up_to_date == False:
-                print('{}  Wallet not updated. Shutting Down'.format(time.strftime('%H:%M:%S')))
+                self.wallet_timeout_count += 1
+                if self.wallet_timeout_count >= self.wallet_timeout_loops:
+                    print('{}  Wallet not updated. Shutting Down'.format(time.strftime('%H:%M:%S')))
                 # restart websockets
-                self.stop()
+                    self.stop()
 #                self.update_wallet()
 #                self.socket_manager.stop_socket(self.socket_key_account)
 #                self.socket_key_account = self.socket_manager.start_user_socket(lambda x: self.account_update(x))
                 return
+            else:
+                self.wallet_timeout_count = 0
             self.bias = self.base_amt - float(self.target_mix*(bid*self.coin_amt + self.base_amt))
             self.sell_surplus = max(0,self.bias);
             self.buy_surplus = -min(0,self.bias);
