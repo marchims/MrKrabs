@@ -21,7 +21,7 @@ from pathlib import Path
 import os
 
 class Rebalancer:
-    
+
     interval = 3/60 # hours
     
     fudge_factor = 1.01 # percent extra 
@@ -1117,10 +1117,10 @@ class MrKrabs2:
         elif p < 0.10:
             sell_guidance = True
         '''    
-        if time.time() - self.data[-1,0] > self.timeout_thresh and flag == 0:
+        if time.time() - self.data[-1,0] > self.timeout_thresh and time.time() - self.data[-1,0] < self.trade_socket_timeout and flag == 0:
             print('{}  Large time since server update. {:.2f} seconds'.format(time.strftime('%H:%M:%S'),time.time() - self.data[-1,0]))
             return
-        elif time.time() - self.data[-1,0] > self.trade_socket_timeout and flag == 0:
+        elif time.time() - self.data[-1,0] >= self.trade_socket_timeout and flag == 0:
             print('{}  Restarting bot'.format(time.strftime('%H:%M:%S'),time.time() - self.data[-1,0]))
             self.stop()
             return
