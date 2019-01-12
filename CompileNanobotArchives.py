@@ -9,7 +9,7 @@ included_extensions = ['csv']
 file_names = [fn for fn in os.listdir(relevant_path)
               if any(fn.endswith(ext) for ext in included_extensions)]
 
-if len(file_names) > 0:
+if len(file_names) > 1:
     print('Found {} files'.format(len(file_names)))
     all_data = np.zeros((0,7))
 
