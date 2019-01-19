@@ -24,7 +24,7 @@ if len(file_names) > 1:
     try:
         toWrite = pd.DataFrame(data = all_data)
         toWrite = toWrite.sort_values(axis=0,by=0)
-        fn = '{}/rebalance_log_{}.csv'.format(relevant_path,time.strftime('%m_%d_%y_%H_%M_%S'))
+        fn = '{}/rebalance_log.csv'.format(relevant_path,time.strftime('%m_%d_%y_%H_%M_%S'))
         toWrite.to_csv(fn,header = False,index = False)
         print('Wrote logs to {}'.format(fn))
         if cleanup:
