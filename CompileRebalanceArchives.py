@@ -28,9 +28,12 @@ if len(file_names) > 1:
         toWrite.to_csv(fn,header = False,index = False)
         print('Wrote logs to {}'.format(fn))
         if cleanup:
+            num_files = 0
             for f in file_names:
-                os.remove('{}/{}'.format(relevant_path,f))
-            print("Cleaned up {} files".format(len(file_names)))
+                if f != 'rebalance_log.csv':
+                    os.remove('{}/{}'.format(relevant_path,f))
+                    num_files += 1
+            print("Cleaned up {} files".format(num_files))
     except:
         print('Error writing to log file!')
     
