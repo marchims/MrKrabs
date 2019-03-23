@@ -161,9 +161,11 @@ class Rebalancer:
                     m = max(min_trade[i][j],min_trade[i][j-1]*self.lookup_price(markets[i][j],'sell'))
                 
             score.append(abs_delta/m)
-            if abs_delta >= m:
+            if abs_delta >= m and self.base_coin != coin_names[i]:
                 delta.append(abs_delta/total_value)
                 norm_delta.append(abs_delta/target[i])
+                #print(coin_names[i])
+                #print('{} {}'.format(target[i],current[i]))
             else:
                 delta.append(0)
                 norm_delta.append(0)
@@ -222,9 +224,10 @@ class Rebalancer:
             trade_side = SIDE_SELL
             trade_amt = -trade_amt
             r = range(len(self.coin_data[coin]['market_name']))
-
+        min_trade_flag = False
         if trade_amt < m:
             trade_amt = 0
+            min_trade_flag = True
 
         traded_coin_amt_final = 0
         
@@ -270,6 +273,7 @@ class Rebalancer:
                             print('Buy {} {}@{}'.format(qty,self.coin_data[coin]['market_name'][i],avg_price))
                         else:
                             print('Sell {} {}@{}'.format(qty,self.coin_data[coin]['market_name'][i],avg_price))
+                        time.sleep(1)
                     except:
                         print("Error making trade for {} {}@{}".format(self.coin_data[coin]['market_name'][i],coin_amt,self.lookup_price(self.coin_data[coin]['market_name'][i],trade_side)))
                         qty = 0
@@ -294,7 +298,7 @@ class Rebalancer:
                     except:
                         print("Error making trade for {} {}@{}".format(self.coin_data[coin]['market_name'][i],coin_amt,self.lookup_price(self.coin_data[coin]['market_name'][i],trade_side)))
                         qty = 0
-                        
+                       
                 if i == 0:
                     traded_coin_amt_final = qty
             else:
@@ -305,6 +309,9 @@ class Rebalancer:
         else:
             new_amt = -traded_coin_amt_final+self.coin_data[coin]['amt']
         
+##        if min_trade_flag == True:
+##            new_val = target
+##        else:
         new_val = self.get_coin_value(coin,amt=new_amt)
         bucket -= new_val
         print("Target: {:.5f} Actual: {:.5f} Error: {:.5f}".format(target,new_val,target-new_val))
@@ -461,9 +468,41 @@ class Rebalancer:
          
 
     def get_targets(self,total_value):
-        for coin in self.coin_data:
-            target = total_value * self.get_target_ratio(coin)
-            self.coin_data[coin]['target_amt'] = target
+        
+        min_trade = self.get_property_list('min_trade_amt')
+        markets = self.get_property_list('market_name')
+        current = self.get_property_list('last_value')
+        coin_names = list(self.coin_data.keys())
+        state_change = True
+        black_list = []
+        deduct_value = 0
+        while state_change:
+            state_change = False
+            target = []
+            for i in range(len(coin_names)):
+                if coin_names[i] in black_list:
+                    target.append(current[i])
+                else:
+                    target.append((total_value-deduct_value) * self.get_target_ratio(coin_names[i],black_list))
+                    m = min_trade[i][0]
+                    raw_delta = target[i]-current[i]
+                    abs_delta = abs(raw_delta)
+                    for j in range(1,len(min_trade[i])):
+                        m *= self.fudge_factor
+                        if raw_delta > 0:
+                            # need to buy, will be selling bnb
+                            m = max(min_trade[i][j],min_trade[i][j-1]*self.lookup_price(markets[i][j],'buy'))
+                        else:
+                            # need to sell coin, will be buying bnb
+                            m = max(min_trade[i][j],min_trade[i][j-1]*self.lookup_price(markets[i][j],'sell'))
+                        
+                    if abs_delta < m:
+                        black_list.append(coin_names[i])
+                        deduct_value += current[i]
+                        state_change = True
+                        break
+        for i in range(len(coin_names)):      
+            self.coin_data[coin_names[i]]['target_amt'] = target[i]
         
 
     def log_values(self):
