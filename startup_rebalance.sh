@@ -2,5 +2,7 @@
 
 sleep 10
 cd /home/pi/Crypto/MrKrabs/
-
-/home/pi/Crypto/python/bin/python3.6 StartRebalance.py
+while :
+do
+	/home/pi/Crypto/python/bin/python3.6 StartRebalance.py
+done
