@@ -1176,9 +1176,11 @@ class MrKrabs2:
             if self.wallet_up_to_date == False:
                 self.wallet_timeout_count += 1
                 if self.wallet_timeout_count >= self.wallet_timeout_loops:
-                    print('{}  Wallet not updated. Shutting Down'.format(time.strftime('%H:%M:%S')))
-                # restart websockets
-                    self.stop()
+                    self.update_wallet()
+                    if self.wallet_up_to_date == False:
+                        print('{}  Wallet not updated. Shutting Down'.format(time.strftime('%H:%M:%S')))
+                        # restart websockets
+                        self.stop()
 #                self.update_wallet()
 #                self.socket_manager.stop_socket(self.socket_key_account)
 #                self.socket_key_account = self.socket_manager.start_user_socket(lambda x: self.account_update(x))
