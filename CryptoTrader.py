@@ -1215,7 +1215,7 @@ class MrKrabs2:
                 if self.trading_enabled == False:
                     if self.bias + amt*(1-self.fee_amt) > 0:
                         self.mean_sell_price = self.mean_sell_price*self.sell_surplus/(self.sell_surplus+amt*(1-self.fee_amt)) + bid*amt*(1-self.fee_amt)/(self.sell_surplus+amt*(1-self.fee_amt))
-                    result = self.client.create_test_order(symbol=self.pair,side=SIDE_SELL,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/bid,2),price=str(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
+                    result = self.client.create_test_order(symbol=self.pair,side=SIDE_SELL,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/bid,2),price='{:f}'.format(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
                     self.coin_amt = self.coin_amt - amt/bid
                     self.base_amt = self.base_amt + amt*(1-self.fee_amt)
                     self.trade_data = np.append(self.trade_data,np.array([trade_time,-1,bid,amt,False,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
@@ -1225,7 +1225,7 @@ class MrKrabs2:
                     self.last_action = 'sell'
                 else:
                     # Do something like initiate a trade
-                    result = self.client.create_order(symbol=self.pair,side=SIDE_SELL,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/bid,2),price=str(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
+                    result = self.client.create_order(symbol=self.pair,side=SIDE_SELL,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/bid,2),price='{:f}'.format(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
                     coin_amt = float(result['executedQty'])
                     if coin_amt > 0:
                         amt = coin_amt*float(result['price'])
@@ -1252,7 +1252,7 @@ class MrKrabs2:
                 if self.trading_enabled == False:
                     if self.bias - amt < 0:
                         self.mean_buy_price = self.mean_buy_price*self.buy_surplus/(self.buy_surplus+amt) + ask*amt/(self.buy_surplus+amt)
-                    result = self.client.create_test_order(symbol=self.pair,side=SIDE_BUY,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/ask,2),price=str(ask),newOrderRespType=ORDER_RESP_TYPE_RESULT)
+                    result = self.client.create_test_order(symbol=self.pair,side=SIDE_BUY,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/ask,2),price='{:f}'.format(ask),newOrderRespType=ORDER_RESP_TYPE_RESULT)
                     self.base_amt = self.base_amt - amt
                     self.coin_amt = self.coin_amt + amt/ask*(1-self.fee_amt)
                     self.trade_data = np.append(self.trade_data,np.array([trade_time,1,ask,amt,False,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
@@ -1262,7 +1262,7 @@ class MrKrabs2:
                     self.last_action = 'buy'
                 else:
                     # Do something like initiate a trade
-                    result = self.client.create_order(symbol=self.pair,side=SIDE_BUY,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/ask,2),price=str(ask),newOrderRespType=ORDER_RESP_TYPE_RESULT)
+                    result = self.client.create_order(symbol=self.pair,side=SIDE_BUY,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/ask,2),price='{:f}'.format(ask),newOrderRespType=ORDER_RESP_TYPE_RESULT)
                     coin_amt = float(result['executedQty'])
                     if coin_amt > 0:
                         amt = coin_amt*float(result['price'])
@@ -1291,14 +1291,14 @@ class MrKrabs2:
                             if self.bias + amt*(1-self.fee_amt) > 0:
                                 self.mean_sell_price = self.mean_sell_price*self.sell_surplus/(self.sell_surplus+amt*(1-self.fee_amt)) + bid*amt*(1-self.fee_amt)/(self.sell_surplus+amt*(1-self.fee_amt))
 
-                            result = self.client.create_test_order(symbol=self.pair,side=SIDE_SELL,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/bid,2),price=str(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
+                            result = self.client.create_test_order(symbol=self.pair,side=SIDE_SELL,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/bid,2),price='{:f}'.format(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
                             self.coin_amt = self.coin_amt - amt/bid
                             self.base_amt = self.base_amt + amt*(1-self.fee_amt)
                             self.trade_data = np.append(self.trade_data,np.array([trade_time,-1,bid,amt,True,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
                             print('Sellback successful: {}@{}!'.format(round(amt/bid,2),bid))
                         else:
                             # Do something like initiate a trade
-                            result = self.client.create_order(symbol=self.pair,side=SIDE_SELL,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/bid++self.coin_precision,2),price=str(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
+                            result = self.client.create_order(symbol=self.pair,side=SIDE_SELL,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/bid+self.coin_precision,2),price='{:f}'.format(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
                             coin_amt = float(result['executedQty'])
                             if coin_amt > 0:
                                 amt = coin_amt*float(result['price'])
@@ -1327,14 +1327,14 @@ class MrKrabs2:
                             if self.bias - amt < 0:
                                 self.mean_buy_price = self.mean_buy_price*self.buy_surplus/(self.buy_surplus+amt) + ask*amt/(self.buy_surplus+amt)
                             
-                            result = self.client.create_test_order(symbol=self.pair,side=SIDE_BUY,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/ask,2),price=str(ask),newOrderRespType=ORDER_RESP_TYPE_RESULT)
+                            result = self.client.create_test_order(symbol=self.pair,side=SIDE_BUY,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/ask,2),price='{:f}'.format(bid),newOrderRespType=ORDER_RESP_TYPE_RESULT)
                             self.base_amt = self.base_amt - amt
                             self.coin_amt = self.coin_amt + amt/ask*(1-self.fee_amt)
                             self.trade_data = np.append(self.trade_data,np.array([trade_time,1,ask,amt,True,self.coin_amt,self.base_amt]).reshape((1,7)),axis=0)
                             print('Buyback successful {}@{}!'.format(round(amt/ask,2),ask))
                         else:
                             # Do something like initiate a trade
-                            result = self.client.create_order(symbol=self.pair,side=SIDE_BUY,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/ask+self.coin_precision,2),price=str(ask),newOrderRespType=ORDER_RESP_TYPE_RESULT)
+                            result = self.client.create_order(symbol=self.pair,side=SIDE_BUY,type=ORDER_TYPE_LIMIT,timeInForce=TIME_IN_FORCE_IOC,quantity=round(amt/ask+self.coin_precision,2),price='{:f}'.format(ask),newOrderRespType=ORDER_RESP_TYPE_RESULT)
                             coin_amt = float(result['executedQty'])
                             
                             if coin_amt > 0:
