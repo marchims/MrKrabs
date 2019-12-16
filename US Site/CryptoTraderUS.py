@@ -18,11 +18,12 @@ from twisted.internet import reactor
 import json
 import sys
 from pathlib import Path
+from decimal import *
 import os
 
 class Rebalancer:
 
-    interval = 3/60 # hours
+    interval = 1/60 # hours
     
     fudge_factor = 1.01 # percent extra 
     
@@ -34,7 +35,18 @@ class Rebalancer:
     coin_data = {}
 
     def __init__(self,keys,base_currency,ratio_worksheet):
+        Client.API_URL = 'https://api.binance.us/api'
+        Client.PUBLIC_API_VERSION = 'v3'
+        Client.WITHDRAW_API_URL = 'https://api.binance.us/wapi'
+        Client.WEBSITE_URL = 'https://www.binance.us'
+        
         self.client = Client(keys[0][0],keys[0][1])
+
+	# some US specific things
+        #self.client.API_URL = 'https://api.binance.us/api'
+        #self.client.WITHDRAW_API_URL = 'https://api.binance.us/wapi'
+        #self.client.WEBSITE_URL = 'https://www.binance.us'
+
         self.base_coin = base_currency
         self.wallet_updated = False
         
@@ -160,7 +172,7 @@ class Rebalancer:
                     # need to sell coin, will be buying bnb
                     m = max(min_trade[i][j],min_trade[i][j-1]*self.lookup_price(markets[i][j],'sell'))
                 
-            score.append(abs_delta/m)
+            score.append(raw_delta/m)
             if abs_delta >= m and self.base_coin != coin_names[i]:
                 delta.append(abs_delta/total_value)
                 norm_delta.append(abs_delta/target[i])
@@ -326,29 +338,28 @@ class Rebalancer:
         # get market info
         for market2 in self.exchange_info['symbols']:
             if market2['symbol'].lower() == market.lower():
-                prec = float(market2['filters'][2]['stepSize'])
-                min_amt = float(market2['filters'][3]['minNotional'])
+                prec = Decimal(market2['filters'][2]['stepSize'].rstrip('0'))
+                min_amt = Decimal(market2['filters'][3]['minNotional'].rstrip('0'))
                 break
         
         if factor:
-            trade_amt_coin = np.ceil(base_amt/self.lookup_price(market,side)/prec)*prec
+            trade_amt_coin = Decimal(base_amt/self.lookup_price(market,side)).quantize(prec,ROUND_UP)
         else:
-            trade_amt_coin = np.floor(base_amt/self.lookup_price(market,side)/prec)*prec
-        f = 1.0
+            trade_amt_coin = Decimal(base_amt/self.lookup_price(market,side)).quantize(prec,ROUND_DOWN)
+        f = Decimal(1.0)
         if factor:
-            f = self.fudge_factor
-        if trade_amt_coin*self.lookup_price(market,side) < min_amt*f:
+            f = Decimal(self.fudge_factor)
+        if trade_amt_coin*Decimal(self.lookup_price(market,side)) < min_amt*f:
             #print("{} {}".format(trade_amt_coin*self.lookup_price(market,side),min_amt))
             return 0
         
-        
-        return trade_amt_coin
+        return float(trade_amt_coin)
         
         
         
     def get_market_info(self,coin):
         des_market_name = coin.lower()+self.base_coin.lower()
-        
+        print(coin);
         for market in self.exchange_info['symbols']:
             if market['symbol'].lower() == des_market_name:
                 self.coin_data[coin]['coin_precision'] = [float(market['filters'][2]['stepSize'])]
@@ -357,7 +368,7 @@ class Rebalancer:
                 return
         
         # if it's here then it's not a direct market
-        des_market_name = coin.lower()+'bnb'
+        des_market_name = coin.lower()+'usdt'
         for market in self.exchange_info['symbols']:
             if market['symbol'].lower() == des_market_name:
                 self.coin_data[coin]['coin_precision'] = [float(market['filters'][2]['stepSize'])]
@@ -365,7 +376,7 @@ class Rebalancer:
                 self.coin_data[coin]['market_name'] = [market['symbol']]
                 break
          
-        des_market_name = 'bnb'+self.base_coin.lower()
+        des_market_name = 'usdt'+self.base_coin.lower()
         for market in self.exchange_info['symbols']:
             if market['symbol'].lower() == des_market_name:
                 self.coin_data[coin]['coin_precision'].append(float(market['filters'][2]['stepSize']))

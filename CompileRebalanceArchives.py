@@ -3,7 +3,7 @@ import os
 import time
 import numpy as np
 
-relevant_path = "/home/pi/Crypto/logs/archive/"
+relevant_path = "/home/pi/Crypto/logs_old/archive/"
 cleanup = True
 included_extensions = ['csv']
 file_names = [fn for fn in os.listdir(relevant_path)
