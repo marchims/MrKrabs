@@ -442,7 +442,7 @@ class Rebalancer:
         if not self.wallet_updated:
             return -1
         self.update_prices()
-        total_value = -self.total_fees
+        total_value = 0
         for coin in self.coin_data:
             if 'amt' in self.coin_data[coin]:
                 value = self.get_coin_value(coin,self.lookup_amt(coin))
@@ -456,7 +456,7 @@ class Rebalancer:
             for coin in self.coin_data:
                 hodl_portfolio_value += self.get_coin_value(coin,self.init_coin_amt[idx])
                 idx += 1
-            self.norm_gain = (total_value-hodl_portfolio_value)/hodl_portfolio_value*100
+            self.norm_gain = (total_value-self.total_fees-hodl_portfolio_value)/hodl_portfolio_value*100
             self.total_gain = (total_value-self.init_total_value)/self.init_total_value*100
             print('Total Value: {} (Raw:{:.2f}% Norm:{:.2f}%)'.format(total_value,self.total_gain,self.norm_gain))
         else:
